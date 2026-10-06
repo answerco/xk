@@ -5,10 +5,10 @@ SELECT facility_code, subject_name, first_at, last_at, days, sensor_online_pct, 
        hr_avg, rr_avg, latest_presence, latest_sleep
 FROM v_subject_overview ORDER BY facility_code, subject_name;
 
--- 2) 특정 대상자의 하루 5분 데이터 (한글 컬럼, '홍길동' 자리에 대상자 이름)
+-- 2) 특정 대상자의 하루 5분 데이터 (한글 컬럼, 가명으로 조회)
 SELECT 시간, 재실상태, 수면상태, 수면깊이, 심박, 호흡
 FROM v_reading_ko
-WHERE 대상자 = '홍길동' AND 시간 >= '2026-09-10 20:00' AND 시간 < '2026-09-11 08:00'
+WHERE 대상자 = '박O진' AND 시간 >= '2026-09-10 20:00' AND 시간 < '2026-09-11 08:00'
 ORDER BY 시간;
 
 -- 3) 최근 14일 수면 추이 (정오 기준 수면일)

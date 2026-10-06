@@ -141,7 +141,7 @@ WHERE abs(r.heart_rate_z) >= 4 OR abs(r.resp_rate_z) >= 4;
 
 -- ---------- 6. 대상자 현황 ----------
 CREATE OR REPLACE VIEW v_subject_overview AS
-SELECT s.subject_id, f.facility_code, f.facility_name, s.subject_name, s.is_name_masked,
+SELECT s.subject_id, f.facility_code, f.facility_name, s.subject_name,
        a.first_at, a.last_at, a.days, a.readings,
        round(100.0 * a.online / a.readings, 1) AS sensor_online_pct,
        round(100.0 * a.present / a.readings, 1) AS present_pct,

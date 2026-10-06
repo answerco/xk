@@ -11,10 +11,19 @@
 - 같은 파일(SHA-256 동일)은 건너뜀 (--force 로 재적재)
 - (subject_id, measured_at) 가 겹치면 나중에 적재한 파일 값으로 갱신 → 기간이 겹치는 재내보내기 파일도 안전
 - 파일 하나가 한 트랜잭션. 형식이 다르면 해당 파일 적재 전에 오류로 중단
+
+가명 처리 (DB 에 실명/실제 시설명을 저장하지 않음):
+- 이름: 가운데 글자를 O 로 (홍길동 → 홍O동, 김철수B → 김O수B). 같은 시설에서 겹치면 '김O순(2)'
+- 시설: 처음 보는 시설번호 순서대로 A요양원, B요양원, ... (원본 시설명은 버림)
+- 같은 사람 재식별: HMAC-SHA256(비밀키, 시설번호|실명) 을 subject.source_key 로 저장.
+  비밀키는 $BIOMETRIC_PSEUDONYM_KEY 또는 --key-file (기본 data/pseudonym.key, 없으면 생성).
+  ※ 키를 잃어버리면 다음 적재 때 같은 사람이 새 대상자로 등록되므로 안전하게 보관할 것.
 """
 import argparse
 import csv
 import hashlib
+import hmac
+import secrets
 import io
 import json
 import os
@@ -56,6 +65,31 @@ class FormatError(Exception):
     pass
 
 
+def mask_name(name):
+    """가운데 글자를 O 로: 홍길동 → 홍O동, 남궁민수 → 남OO수, 김철 → 김O, 김철수B → 김O수B."""
+    m = re.match(r"^(.*?)([A-Za-z0-9]*)$", name)
+    base, suffix = m.group(1), m.group(2)
+    if len(base) == 2:
+        base = base[0] + "O"
+    elif len(base) > 2:
+        base = base[0] + "O" * (len(base) - 2) + base[-1]
+    return base + suffix
+
+
+def load_key(path):
+    env = os.environ.get("BIOMETRIC_PSEUDONYM_KEY")
+    if env:
+        return env.encode()
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            f.write(secrets.token_hex(32))
+        os.chmod(path, 0o600)
+        print(f"가명 키를 새로 만들었습니다: {path} (잃어버리지 않게 보관하세요)", file=sys.stderr)
+    with open(path) as f:
+        return f.read().strip().encode()
+
+
 def decode_name(name):
     """일부 zip 도구가 '#Uae40' 형태로 저장한 한글 파일명을 복원."""
     return ZIP_NAME_RE.sub(lambda m: chr(int(m.group(1), 16)), name)
@@ -78,7 +112,7 @@ def parse_duration(text):
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 
-def parse_file(file_name, data):
+def parse_file(file_name, data, key):
     text = data.decode("utf-8-sig")
     lines = text.splitlines()
     m = HEADER_RE.match(lines[0].strip())
@@ -135,12 +169,14 @@ def parse_file(file_name, data):
         first = first or ts
         last = ts
 
+    real_name = m.group("name").strip()
+    masked = mask_name(real_name)
     return {
-        "file_name": file_name,
+        "file_name": file_name.replace(real_name, masked),
         "sha256": hashlib.sha256(data).hexdigest(),
-        "subject_name": m.group("name").strip(),
-        "facility_code": m.group("code"),
-        "facility_name": m.group("facility").strip(),
+        "subject_name": masked,
+        "source_key": hmac.new(key, f"{m.group('code')}|{real_name}".encode(), hashlib.sha256).hexdigest(),
+        "source_code": m.group("code"),
         "range_start": rng.group(1) if rng else None,
         "range_end": rng.group(2) if rng else None,
         "summary": summary,
@@ -177,12 +213,18 @@ def build_sql(rec):
     sum_vals = ", ".join("NULL" if s.get(c) is None else str(s[c]) for c in sum_cols)
     return f"""
 BEGIN;
-INSERT INTO facility (facility_code, facility_name) VALUES ({q(rec['facility_code'])}, {q(rec['facility_name'])})
-    ON CONFLICT (facility_code) DO UPDATE SET facility_name = EXCLUDED.facility_name
-    RETURNING facility_id AS fid \\gset
-INSERT INTO subject (facility_id, subject_name) VALUES (:fid, {q(rec['subject_name'])})
-    ON CONFLICT (facility_id, subject_name) DO UPDATE SET subject_name = EXCLUDED.subject_name
-    RETURNING subject_id AS sid \\gset
+-- 새 시설이면 다음 알파벳(A, B, ...) 가명 부여
+INSERT INTO facility (facility_code, facility_name, source_code)
+    SELECT l, l || '요양원', {q(rec['source_code'])} FROM (SELECT chr(65 + count(*)::int) AS l FROM facility) x
+    ON CONFLICT (source_code) DO UPDATE SET source_code = EXCLUDED.source_code
+    RETURNING facility_id AS fid, facility_code AS fcode \\gset
+-- 새 대상자면 가명 등록 (같은 시설에 같은 가명이 있으면 '(2)', '(3)' ...)
+INSERT INTO subject (facility_id, subject_name, source_key)
+    SELECT :fid, CASE WHEN n = 0 THEN {q(rec['subject_name'])} ELSE {q(rec['subject_name'])} || '(' || (n + 1) || ')' END, {q(rec['source_key'])}
+    FROM (SELECT count(*) AS n FROM subject WHERE facility_id = :fid
+          AND (subject_name = {q(rec['subject_name'])} OR subject_name LIKE {q(rec['subject_name'] + '(%)')})) c
+    ON CONFLICT (source_key) DO UPDATE SET source_key = EXCLUDED.source_key
+    RETURNING subject_id AS sid, subject_name AS sname \\gset
 DELETE FROM import_file WHERE file_sha256 = {q(rec['sha256'])};
 INSERT INTO import_file (subject_id, file_name, file_sha256, range_start, range_end, row_count, first_measured_at, last_measured_at)
     VALUES (:sid, {q(rec['file_name'])}, {q(rec['sha256'])}, {q(rec['range_start'])}, {q(rec['range_end'])},
@@ -200,7 +242,7 @@ INSERT INTO vital_reading (subject_id, measured_at, {cols}, import_id)
     FROM stg
     ON CONFLICT (subject_id, measured_at) DO UPDATE SET {upd};
 COMMIT;
-\\echo 적재 완료: {rec['facility_code']} / {rec['subject_name'].replace(chr(10), ' ')} / {rec['row_count']}행
+\\echo 적재 완료: :fcode / :sname / {rec['row_count']}행
 """
 
 
@@ -220,8 +262,11 @@ def main():
     ap.add_argument("--force", action="store_true", help="이미 적재한 파일도 다시 적재")
     ap.add_argument("--no-refresh", action="store_true", help="적재 후 분석용 materialized view 갱신 생략")
     ap.add_argument("--dry-run", action="store_true", help="파싱/검증만 수행")
+    ap.add_argument("--key-file", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "pseudonym.key"),
+                    help="가명 HMAC 비밀키 파일 (기본: data/pseudonym.key, $BIOMETRIC_PSEUDONYM_KEY 우선)")
     args = ap.parse_args()
 
+    key = load_key(os.path.normpath(args.key_file))
     loaded = set()
     if not args.dry_run and not args.force:
         loaded = set(psql(args, "SELECT file_sha256 FROM import_file;", capture=True).split())
@@ -231,11 +276,16 @@ def main():
         [args.psql, "-X", "-q", "-v", "ON_ERROR_STOP=1"] + ([args.dsn] if args.dsn else []),
         stdin=subprocess.PIPE, text=True)
     try:
+        records = []
         for name, data in iter_inputs(args.inputs):
             try:
-                rec = parse_file(name, data)
+                records.append(parse_file(name, data, key))
             except (FormatError, ValueError) as e:
                 sys.exit(f"[오류] {name}: {e}")
+        # 시설번호 순으로 적재해야 A, B, C ... 가 원본 번호 순서를 따른다
+        records.sort(key=lambda r: (r["source_code"], r["file_name"]))
+        for rec in records:
+            name = rec["file_name"]
             if rec["sha256"] in loaded:
                 skipped += 1
                 print(f"건너뜀(이미 적재): {name}", file=sys.stderr)
@@ -244,7 +294,7 @@ def main():
             if proc:
                 proc.stdin.write(build_sql(rec))
             else:
-                print(f"검증 OK: {rec['facility_code']} / {rec['subject_name']} / {rec['row_count']}행 {rec['first']} ~ {rec['last']}")
+                print(f"검증 OK: 시설 {rec['source_code']} / {rec['subject_name']} / {rec['row_count']}행 {rec['first']} ~ {rec['last']}")
         if proc and not args.no_refresh:
             proc.stdin.write("DO $$ BEGIN PERFORM refresh_analytics(); END $$;\n\\echo 분석 뷰 갱신 완료\n")
     finally:

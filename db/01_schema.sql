@@ -40,16 +40,17 @@ ON CONFLICT DO NOTHING;
 -- ---------- 마스터 ----------
 CREATE TABLE IF NOT EXISTS facility (
     facility_id    serial PRIMARY KEY,
-    facility_code  varchar(10) NOT NULL UNIQUE,   -- 예: '06'
-    facility_name  text        NOT NULL,          -- 예: '봄마을(미오림복지재단)'
+    facility_code  varchar(10) NOT NULL UNIQUE,   -- 가명 코드: 'A', 'B', ... (원본 시설코드 순서대로 부여)
+    facility_name  text        NOT NULL,          -- 가명: 'A요양원'
+    source_code    varchar(10) NOT NULL UNIQUE,   -- 내보내기 파일의 시설 번호 (예: '06'). 실제 시설명은 저장하지 않음
     created_at     timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS subject (                -- 대상자(입소자) = 센서 1대
     subject_id     serial PRIMARY KEY,
     facility_id    int  NOT NULL REFERENCES facility,
-    subject_name   text NOT NULL,                   -- 원본 표기 그대로 (예: '김정옥B', '나O례')
-    is_name_masked boolean GENERATED ALWAYS AS (subject_name LIKE '%O%') STORED,  -- 'O' 로 가려진 이름
+    subject_name   text NOT NULL,                   -- 가명: 가운데 글자를 O 로 (홍길동 → 홍O동). 겹치면 '김O순(2)'
+    source_key     char(64) NOT NULL UNIQUE,        -- HMAC-SHA256(비밀키, 시설번호|실명): 재적재 시 같은 사람 식별용. 키 없이는 실명 역추적 불가
     note           text,
     created_at     timestamptz NOT NULL DEFAULT now(),
     UNIQUE (facility_id, subject_name)
@@ -59,7 +60,7 @@ CREATE TABLE IF NOT EXISTS subject (                -- 대상자(입소자) = �
 CREATE TABLE IF NOT EXISTS import_file (
     import_id         serial PRIMARY KEY,
     subject_id        int  NOT NULL REFERENCES subject,
-    file_name         text NOT NULL,
+    file_name         text NOT NULL,                -- 파일명 속 실명은 가명으로 치환해 저장
     file_sha256       char(64) NOT NULL UNIQUE,     -- 같은 파일 중복 적재 방지
     range_start       date,                          -- 파일 헤더 '날짜 범위'
     range_end         date,

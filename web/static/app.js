@@ -108,7 +108,7 @@
     let lastFac = null;
     for (const s of filteredSubjects()) {
       if (s.facility_code !== lastFac) {
-        list.append(h("div", { class: "group" }, `${s.facility_code} ${s.facility_name}`));
+        list.append(h("div", { class: "group" }, s.facility_name));
         lastFac = s.facility_code;
       }
       const st = currentStatus(s);
@@ -171,9 +171,9 @@
     const sections = [];
     const byFac = new Map();
     subs.forEach(s => { if (!byFac.has(s.facility_code)) byFac.set(s.facility_code, []); byFac.get(s.facility_code).push(s); });
-    for (const [code, list] of byFac) {
+    for (const [, list] of byFac) {
       sections.push(h("section", { class: "section" },
-        h("div", { class: "section-head" }, h("h2", null, `${code} ${list[0].facility_name}`), h("span", { class: "muted" }, `${list.length}명`)),
+        h("div", { class: "section-head" }, h("h2", null, list[0].facility_name), h("span", { class: "muted" }, `${list.length}명`)),
         h("div", { class: "cards" }, list.map(subjectCard))));
     }
     main.replaceChildren(head, tiles, ...sections,
@@ -200,8 +200,7 @@
       h("div", { class: "page-head" },
         h("h1", null, s.subject_name),
         statusBadge(s),
-        h("span", { class: "subtle" }, `${s.facility_code} ${s.facility_name}`),
-        s.is_name_masked ? h("span", { class: "badge" }, "이름 가림") : null,
+        h("span", { class: "subtle" }, s.facility_name),
         h("span", { class: "muted" }, `${s.first_at} ~ ${s.last_at} · ${num(s.days, 0)}일 · 마지막 측정 ${s.latest_at ? s.latest_at.replace("T", " ") : "–"}`)),
       h("div", { class: "tiles" },
         tile("평균 수면 (최근 7일)", s.sleep_avg_min_7d == null ? "–" : hm(s.sleep_avg_min_7d)),
@@ -443,7 +442,7 @@
       state.subjects = subjects;
       $("#meta").textContent = `측정 ${num(meta.readings, 0)}건 · 대상자 ${meta.subjects}명 · ${meta.first_date} ~ ${meta.last_date}`;
       const sel = $("#facilityFilter");
-      for (const f of meta.facilities) sel.append(h("option", { value: f.facility_code }, `${f.facility_code} ${f.facility_name} (${f.subjects})`));
+      for (const f of meta.facilities) sel.append(h("option", { value: f.facility_code }, `${f.facility_name} (${f.subjects}명)`));
       route();
     } catch (e) {
       main.replaceChildren(h("p", { class: "error" }, "데이터를 불러오지 못했습니다: " + e.message));

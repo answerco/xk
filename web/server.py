@@ -89,7 +89,7 @@ def api_meta(_q):
 
 SUBJECT_SQL = """
     WITH last AS (SELECT max(local_date) AS d FROM mv_daily_subject)
-    SELECT o.subject_id, o.facility_code, o.facility_name, o.subject_name, o.is_name_masked,
+    SELECT o.subject_id, o.facility_code, o.facility_name, o.subject_name,
            o.first_at, o.last_at, o.days, o.readings, o.sensor_online_pct, o.present_pct,
            o.hr_avg, o.rr_avg, o.latest_presence, o.latest_sleep, o.latest_hr, o.latest_rr,
            lm.latest_at,
