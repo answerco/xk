@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생체 데이터 뷰어</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">생체 데이터 뷰어</a>
+  <span class="meta" id="meta"></span>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="화면 테마 전환">테마: 자동</button>
+</header>
+<div class="layout">
+  <aside class="sidebar" aria-label="대상자 목록">
+    <div class="filters">
+      <select id="facilityFilter" aria-label="시설 선택"><option value="">전체 시설</option></select>
+      <input id="search" type="search" placeholder="이름 검색" aria-label="이름 검색">
+    </div>
+    <nav id="subjectList" class="subject-list"></nav>
+  </aside>
+  <main id="main" class="main" tabindex="-1"></main>
+</div>
+<div id="tooltip" class="tooltip" role="status" hidden></div>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
