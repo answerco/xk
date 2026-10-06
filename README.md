@@ -186,6 +186,20 @@ createdb biometric && pg_restore -d biometric --no-owner data/biometric.dump
 
 ### 웹 뷰어
 
+**내 PC 에서 바로 보기 (Docker Desktop, 덤프 파일 사용)**
+
+```bash
+git clone -b claude/biometric-data-db-design-67y819 https://github.com/answerco/xk.git
+cd xk
+mkdir data            # 받은 biometric.dump 를 data/ 에 넣기
+docker compose up -d
+docker compose cp data/biometric.dump db:/tmp/biometric.dump
+docker compose exec db pg_restore -U biometric -d biometric --clean --if-exists --no-owner /tmp/biometric.dump
+```
+
+브라우저에서 http://127.0.0.1:8000 접속. 끌 때는 `docker compose down` (데이터는 유지, 지우려면 `down -v`).
+
+
 DB 에 저장된 데이터를 브라우저에서 바로 볼 수 있는 화면입니다 (`web/`).
 
 ```bash
