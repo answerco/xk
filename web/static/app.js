@@ -421,13 +421,15 @@
     const rows = await api(`/api/subjects/${s.subject_id}/anomalies?limit=500`);
     if (token !== routeToken) return;
     const body = rows.length ? h("div", { class: "table-wrap" }, h("table", null,
-      h("thead", null, h("tr", null, ["시간", "재실", "수면", "심박", "심박 Z", "호흡", "호흡 Z", "구분"].map(t => h("th", null, t)))),
+      h("thead", null, h("tr", null, ["시간", "재실", "수면", "심박", "심박 Z", "호흡", "호흡 Z", "구분"].map(t => h("th", { class: ["재실", "수면", "구분"].includes(t) ? "l" : null }, t)))),
       h("tbody", null, rows.map(r => h("tr", { class: "link", onclick: () => { location.hash = `#/s/${s.subject_id}/day/${r.t.slice(0, 10)}`; } },
         h("td", { class: "num" }, r.t.replace("T", " ")), h("td", { class: "l" }, PRESENCE[r.presence].label),
         h("td", { class: "l" }, r.sleep ? SLEEP[r.sleep].label : ""),
         h("td", { class: "num" }, num(r.hr)), h("td", { class: "num" + (r.hr_flag ? " flag-txt" : "") }, num(r.hr_z, 2)),
         h("td", { class: "num" }, num(r.rr)), h("td", { class: "num" + (r.rr_flag ? " flag-txt" : "") }, num(r.rr_z, 2)),
-        h("td", { class: "l" }, [r.hr_flag ? "▲ 심박" : null, r.rr_flag ? "▲ 호흡" : null].filter(Boolean).join(" · ")))))))
+        h("td", { class: "l" }, [
+          r.hr_flag ? (r.hr_z > 0 ? "▲ 심박 높음" : "▼ 심박 낮음") : null,
+          r.rr_flag ? (r.rr_z > 0 ? "▲ 호흡 높음" : "▼ 호흡 낮음") : null].filter(Boolean).join(" · ")))))))
       : h("p", { class: "muted" }, "이상치가 없습니다.");
     main.replaceChildren(...subjectHeader(s, "anomalies"),
       h("p", { class: "subtle" }, `Z-점수(개인 기준선 대비 편차)의 절댓값이 4 이상인 측정, 최근 ${rows.length}건. 행을 클릭하면 그날 상세로 이동합니다.`),

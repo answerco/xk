@@ -6,3 +6,4 @@ data/
 *.sql.gz
 .env
 __pycache__/
+screenshots/
