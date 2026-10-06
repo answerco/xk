@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: biometric
+      POSTGRES_USER: biometric
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biometric}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_analytics.sql:/docker-entrypoint-initdb.d/02_analytics.sql:ro
+volumes:
+  pgdata:

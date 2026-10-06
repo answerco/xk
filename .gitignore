@@ -1,0 +1,8 @@
+# 원본/적재 데이터는 개인 건강정보이므로 저장소에 커밋하지 않는다
+data/
+*.csv
+*.zip
+*.dump
+*.sql.gz
+.env
+__pycache__/
